@@ -10,7 +10,7 @@ This port is adapted from https://github.com/Wang-Yue/NC1020 which is optimized 
 - run `./nc1020`
 
 ## Key bindings
-- Backquote "`\`" is the power key.
+- Backquote is the power key.
 - LCTRL for HELP
 - LALT or 0 for SYM
 - F1~F4 are mapped to DevTerm upper right keys `[ ] - =`

@@ -23,11 +23,21 @@ SDL_Texture *indicator_num;
 SDL_Texture *indicator_eng;
 SDL_Texture *indicator_caps;
 SDL_Texture *indicator_shift;
+SDL_Texture *bottom_border;
 
 static uint8_t lcd_buf[WQX_SCREEN_WIDTH * WQX_SCREEN_HEIGHT / 8];
 static bool lcd_col0[WQX_SCREEN_HEIGHT];
 static bool rctrl_down = false;
 
+// was: RRGGBBAA (host is little endian)     AA   BB  GG  RR
+//static const unsigned char on_color[4] = { 255, 0, 0, 0 };
+//static const unsigned char off_color[4] = { 255, 60, 73, 61 };
+//static const size_t color_size = sizeof(on_color)
+constexpr uint32_t on_color = 0xff000000;
+constexpr uint32_t off_color = 0xff717f70;
+constexpr uint32_t off_color_r = 0x71;
+constexpr uint32_t off_color_g = 0x7f;
+constexpr uint32_t off_color_b = 0x70;
 
 bool InitEverything() {
   if (SDL_Init(SDL_INIT_EVERYTHING) == -1) {
@@ -63,6 +73,9 @@ bool InitEverything() {
 
   psurface = IMG_Load("caps.png");
   indicator_caps = SDL_CreateTextureFromSurface(renderer, psurface);
+
+  psurface = IMG_Load("bottom_border.png");
+  bottom_border = SDL_CreateTextureFromSurface(renderer, psurface);
 
   wqx::WqxRom rom = {
     .romPath = "./obj_lu.bin",
@@ -118,6 +131,36 @@ void draw_indicator(SDL_Renderer* renderer, int x, int y, SDL_Texture *img, uint
   SDL_Rect dst = { x, y, 80, 24 };
 
   SDL_RenderCopy(renderer, img, &src, &dst);
+}
+
+void draw_vbar_component(SDL_Renderer* renderer, int x, int y, int h)
+{
+  ++y;
+  for (int i = 0; i < h; i += 5) {
+    SDL_RenderDrawLine(renderer, x, y + i, x + 15, y + i);
+  }
+}
+
+void draw_bars(SDL_Renderer* renderer, int x, int y, int w, int h)
+{
+  const int vbar_frame_h = h;
+  const int hbar_frame_w = w;
+  const int vbar_h = vbar_frame_h - 6;
+  const int vbar_y = y + 3;
+  const int vbar_comp_h = vbar_h / sizeof(lcd_vbar);
+
+  const SDL_Rect vbar_frame = { x, y, 20, vbar_frame_h };
+
+  if (lcd_col0[LCD_VBAR_FRAME]) {
+    SDL_RenderDrawRect(renderer, &vbar_frame);
+  }
+
+  for(int i = 0; i < sizeof(lcd_vbar); ++i) {
+    if (lcd_col0[lcd_vbar[i]]) {
+      draw_vbar_component(renderer, x + 2, vbar_y + i * vbar_comp_h, vbar_comp_h);
+    }
+  }
+
 }
 
 void handle_key(SDL_Event* event) {
@@ -330,18 +373,9 @@ void handle_key(SDL_Event* event) {
   }
 }
 
-void Render() {
-  constexpr SDL_Rect viewport_area = { 0, 0, 1280, 480 };
+void draw_lcdmatrix() 
+{
   constexpr SDL_Rect bitblt_area = { 240, 40, WQX_SCREEN_WIDTH * LINE_SIZE, WQX_SCREEN_HEIGHT * LINE_SIZE };
-  // was: RRGGBBAA (host is little endian)     AA   BB  GG  RR
-  //static const unsigned char on_color[4] = { 255, 0, 0, 0 };
-  //static const unsigned char off_color[4] = { 255, 60, 73, 61 };
-  //static const size_t color_size = sizeof(on_color)
-  constexpr uint32_t on_color = 0xff000000;
-  constexpr uint32_t off_color = 0xff717f70;
-
-  SDL_SetRenderDrawColor(renderer, 0x71, 0x7f, 0x70, 0xff);
-  SDL_RenderFillRect(renderer, &viewport_area);
   uint32_t *imgbuf = nullptr;
   int pitch = 0;
   static const SDL_Rect source = { 0, 0, WQX_SCREEN_WIDTH, WQX_SCREEN_HEIGHT };
@@ -359,7 +393,16 @@ void Render() {
     imgbuf[i * WQX_SCREEN_WIDTH] = off_color;
   }
 
+  SDL_UnlockTexture(wqx_screen_texture);
+  SDL_RenderCopy(renderer, wqx_screen_texture, &source, &bitblt_area);
+}
+
+void Render() {
+  constexpr SDL_Rect viewport_area = { 0, 0, 1280, 480 };
+  SDL_SetRenderDrawColor(renderer, off_color_r, off_color_g, off_color_b, 0xff);
+  SDL_RenderFillRect(renderer, &viewport_area);
   SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0xff);
+  draw_lcdmatrix();
   draw_digit(renderer, 180, 6, lcd_digit0);
   draw_digit(renderer, 194, 6, lcd_digit1);
   draw_digit(renderer, 208, 6, lcd_digit2);
@@ -370,8 +413,11 @@ void Render() {
   draw_indicator(renderer, 160, 92, indicator_caps, LCD_CAPS);
   draw_indicator(renderer, 160, 118, indicator_shift, LCD_SHIFT);
 
-  SDL_UnlockTexture(wqx_screen_texture);
-  SDL_RenderCopy(renderer, wqx_screen_texture, &source, &bitblt_area);
+  draw_bars(renderer, 120, 30, 100, 400);
+
+  constexpr SDL_Rect bottom_border_area = { 0, 450, 1280, 30 };
+  SDL_RenderCopy(renderer, bottom_border, NULL, &bottom_border_area);
+
   SDL_RenderPresent(renderer);
 }
 
